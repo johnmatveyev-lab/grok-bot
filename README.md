@@ -2,6 +2,9 @@
 
 A local clone of [xAI Grok Bot](https://x.ai/bot): named AI teammates you message like coworkers. They share one computer — files, a browser, and a terminal — and only come back when something needs you.
 
+- **Live:** [https://grok-bot-six.vercel.app](https://grok-bot-six.vercel.app)
+- **Repo:** [https://github.com/johnmatveyev-lab/grok-bot](https://github.com/johnmatveyev-lab/grok-bot)
+
 ## Run
 
 ```bash
