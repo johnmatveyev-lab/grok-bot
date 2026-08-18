@@ -15,7 +15,19 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Paste an xAI API key in **Settings → General** (or set `XAI_API_KEY`) to use **grok-4.6**. Without a key, Bots still use the shared computer in local mode.
+Add API keys in **Settings → Models**, or set env vars:
+
+| Provider | Env var | Default model |
+| --- | --- | --- |
+| xAI / Grok | `XAI_API_KEY` | `grok-4.6` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-5.6-terra` |
+| NVIDIA NIM | `NVIDIA_API_KEY` | Nemotron 3 Super |
+| Kimi (Moonshot) | `MOONSHOT_API_KEY` | `kimi-k3` |
+| Qwen (DashScope) | `DASHSCOPE_API_KEY` | `qwen3.5-plus` |
+| OpenRouter | `OPENROUTER_API_KEY` | `moonshotai/kimi-k3` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-5` |
+
+Without a key, Bots still use the shared computer in local mode. Switch the live model from the header picker.
 
 ## What it includes
 
@@ -29,6 +41,6 @@ Paste an xAI API key in **Settings → General** (or set `XAI_API_KEY`) to use *
 
 ## Deploy
 
-The app is a Next.js project and deploys on Vercel. Set `XAI_API_KEY` in the project environment if you want Grok 4.6 in production. On Vercel the shared computer writes to `/tmp` (ephemeral per instance).
+The app is a Next.js project and deploys on Vercel. Set any of the provider env vars above on the Vercel project if you want a default key in production. You can also paste keys in **Settings → Models** (kept in the browser so they survive serverless restarts). On Vercel the shared computer writes to `/tmp` (ephemeral per instance).
 
 This is an unofficial clone. It is not the Cursor / xAI product.

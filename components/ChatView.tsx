@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Check, Monitor, MoreHorizontal, PanelRight, StopCircle } from "lucide-react";
 import type { Chat, Message } from "@/lib/types";
 import { prettyToolName } from "@/lib/tools";
@@ -15,6 +15,7 @@ export function ChatView({
   onReact,
   onApprove,
   onStop,
+  modelPicker,
 }: {
   chat: Chat;
   chats: Chat[];
@@ -24,6 +25,7 @@ export function ChatView({
   onReact: (messageId: string, emoji: string) => void;
   onApprove: (messageId: string, status: "approved" | "rejected") => void;
   onStop: () => void;
+  modelPicker?: ReactNode;
 }) {
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -53,6 +55,7 @@ export function ChatView({
               Stop
             </button>
           )}
+          {modelPicker}
           <button className="icon-btn" title="Agent Computer" onClick={onOpenComputer}>
             <Monitor size={16} />
           </button>

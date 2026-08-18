@@ -14,6 +14,8 @@ export function emptyPersist(): PersistShape {
       accountName: "You",
       apiKeyConfigured: false,
       updateTrack: "stable",
+      activeProvider: "xai",
+      activeModel: "grok-4.6",
     },
     chats: [],
     activeId: null,

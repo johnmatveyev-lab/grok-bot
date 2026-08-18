@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AppSettings, Plugin, Skill, Theme } from "@/lib/types";
+import { PROVIDERS, type ProviderId, type ProviderStatus } from "@/lib/providers";
 
-const TABS = ["General", "Plugins", "Team Setup", "Appearance", "Updates"] as const;
+const TABS = ["General", "Models", "Plugins", "Team Setup", "Appearance", "Updates"] as const;
 type Tab = (typeof TABS)[number];
 
 export function SettingsModal({
@@ -15,25 +16,31 @@ export function SettingsModal({
   onSettings,
   onPlugins,
   onSkills,
-  onSaveKey,
-  apiConfigured,
+  providerStatus,
+  onSaveProvider,
+  onUseProvider,
+  initialTab,
 }: {
   open: boolean;
   settings: AppSettings;
   plugins: Plugin[];
   skills: Skill[];
-  apiConfigured: boolean;
   onClose: () => void;
   onSettings: (p: Partial<AppSettings>) => void;
   onPlugins: (p: Plugin[]) => void;
   onSkills: (s: Skill[]) => void;
-  onSaveKey: (key: string) => Promise<void>;
+  providerStatus: Record<ProviderId, ProviderStatus>;
+  onSaveProvider: (id: ProviderId, data: { key?: string; model?: string; baseUrl?: string; clear?: boolean }) => Promise<void>;
+  onUseProvider: (id: ProviderId, model: string) => void;
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("General");
-  const [key, setKey] = useState("");
+  const [tab, setTab] = useState<Tab>(initialTab || "General");
   const [q, setQ] = useState("");
   const [plugView, setPlugView] = useState<"Marketplace" | "Yours">("Marketplace");
-  const [saved, setSaved] = useState("");
+
+  useEffect(() => {
+    if (open && initialTab) setTab(initialTab);
+  }, [open, initialTab]);
 
   if (!open) return null;
 
@@ -68,33 +75,21 @@ export function SettingsModal({
                   onChange={(e) => onSettings({ accountName: e.target.value })}
                 />
               </div>
-              <div className="mt-4 rounded-2xl border border-[var(--line)] p-4">
-                <div className="text-[13px] font-medium">xAI API key</div>
-                <p className="mt-1 text-[12.5px] text-[var(--muted)]">
-                  Stored on this machine only. Used server-side against api.x.ai with model grok-4.6.{" "}
-                  {apiConfigured ? "A key is configured." : "No key yet — Bots will still use the shared computer in local mode."}
-                </p>
-                <input
-                  className="field mt-3"
-                  type="password"
-                  placeholder="xai-..."
-                  value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                />
-                <button
-                  className="mt-3 h-9 rounded-full bg-[var(--text)] px-4 text-[12.5px] font-medium text-[var(--invert)]"
-                  onClick={async () => {
-                    await onSaveKey(key);
-                    setKey("");
-                    setSaved("Saved");
-                    setTimeout(() => setSaved(""), 1500);
-                  }}
-                >
-                  Save key
-                </button>
-                {saved && <span className="ml-3 text-[12px] text-pulse">{saved}</span>}
-              </div>
+              <p className="mt-4 text-[13px] text-[var(--muted)]">
+                API keys live in <button className="text-link" onClick={() => setTab("Models")}>Settings → Models</button>.
+                Without a key, Bots still use the shared computer in local mode.
+              </p>
             </section>
+          )}
+
+          {tab === "Models" && (
+            <ModelsTab
+              activeProvider={settings.activeProvider}
+              activeModel={settings.activeModel}
+              status={providerStatus}
+              onSave={onSaveProvider}
+              onUse={onUseProvider}
+            />
           )}
 
           {tab === "Plugins" && (
@@ -332,6 +327,168 @@ function Row({
       >
         {action}
       </button>
+    </div>
+  );
+}
+
+function ModelsTab({
+  activeProvider,
+  activeModel,
+  status,
+  onSave,
+  onUse,
+}: {
+  activeProvider: string;
+  activeModel: string;
+  status: Record<ProviderId, ProviderStatus>;
+  onSave: (id: ProviderId, data: { key?: string; model?: string; baseUrl?: string; clear?: boolean }) => Promise<void>;
+  onUse: (id: ProviderId, model: string) => void;
+}) {
+  return (
+    <section>
+      <h2 className="text-[18px] font-semibold tracking-[-0.03em]">Models</h2>
+      <p className="mt-1 text-[12.5px] text-[var(--muted)]">
+        Save a key per provider, pick a model, then use it for every Bot. Keys stay on this machine (and in the
+        browser so Vercel deploys keep working). You can also set the matching env var.
+      </p>
+      <div className="mt-4 space-y-3">
+        {PROVIDERS.map((p) => (
+          <ProviderCard
+            key={p.id}
+            def={p}
+            active={activeProvider === p.id}
+            activeModel={activeModel}
+            status={status[p.id]}
+            onSave={onSave}
+            onUse={onUse}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProviderCard({
+  def,
+  active,
+  status,
+  onSave,
+  onUse,
+}: {
+  def: (typeof PROVIDERS)[number];
+  active: boolean;
+  activeModel: string;
+  status: ProviderStatus;
+  onSave: (id: ProviderId, data: { key?: string; model?: string; baseUrl?: string; clear?: boolean }) => Promise<void>;
+  onUse: (id: ProviderId, model: string) => void;
+}) {
+  const [key, setKey] = useState("");
+  const [model, setModel] = useState(status?.model || def.defaultModel);
+  const [custom, setCustom] = useState("");
+  const [baseUrl, setBaseUrl] = useState(status?.baseUrl || def.baseUrl);
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    setModel(status?.model || def.defaultModel);
+    setBaseUrl(status?.baseUrl || def.baseUrl);
+  }, [status?.model, status?.baseUrl, def.defaultModel, def.baseUrl]);
+
+  const chosen = custom.trim() || model;
+
+  return (
+    <div className={`rounded-2xl border p-4 ${active ? "border-[var(--text)]" : "border-[var(--line)]"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[14px] font-medium">{def.name}</div>
+          <p className="mt-0.5 text-[12px] text-[var(--muted)]">{def.hint}</p>
+        </div>
+        <span className={`pill ${status?.configured ? "live" : ""}`}>
+          {status?.configured ? "Connected" : "No key"}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <input
+          className="field"
+          type="password"
+          placeholder={status?.configured ? "••••••••  (leave blank to keep)" : def.placeholder}
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+        />
+        <select
+          className="field"
+          value={def.models.some((m) => m.id === model) ? model : "__custom"}
+          onChange={(e) => setModel(e.target.value)}
+        >
+          {def.models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+          <option value="__custom">Custom model id…</option>
+        </select>
+      </div>
+      {(model === "__custom" || !def.models.some((m) => m.id === model)) && (
+        <input
+          className="field mt-2"
+          placeholder="Custom model id"
+          value={custom || (def.models.some((m) => m.id === model) ? "" : model)}
+          onChange={(e) => {
+            setCustom(e.target.value);
+            setModel("__custom");
+          }}
+        />
+      )}
+      {def.allowBaseUrl && (
+        <input
+          className="field mt-2"
+          placeholder="Base URL"
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+        />
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          className="h-8 rounded-full bg-[var(--text)] px-3 text-[12px] font-medium text-[var(--invert)]"
+          onClick={async () => {
+            await onSave(def.id, {
+              key: key.trim() || undefined,
+              model: chosen === "__custom" ? custom.trim() : chosen,
+              baseUrl: def.allowBaseUrl ? baseUrl : undefined,
+            });
+            setKey("");
+            setNote("Saved");
+            setTimeout(() => setNote(""), 1500);
+          }}
+        >
+          Save
+        </button>
+        <button
+          className="h-8 rounded-full border border-[var(--line-2)] px-3 text-[12px]"
+          onClick={() => onUse(def.id, chosen === "__custom" ? custom.trim() || def.defaultModel : chosen)}
+        >
+          Use this
+        </button>
+        {status?.configured && (
+          <button
+            className="h-8 rounded-full px-3 text-[12px] text-danger"
+            onClick={async () => {
+              await onSave(def.id, { clear: true });
+              setNote("Cleared");
+              setTimeout(() => setNote(""), 1500);
+            }}
+          >
+            Remove key
+          </button>
+        )}
+        <a className="ml-auto text-[11.5px] text-link" href={def.docs} target="_blank" rel="noreferrer">
+          Get a key
+        </a>
+        {note && <span className="text-[12px] text-pulse">{note}</span>}
+      </div>
+      <div className="mt-2 text-[11px] text-[var(--dim)]">
+        Env var <code>{def.envVar}</code>
+        {active ? " · in use" : ""}
+      </div>
     </div>
   );
 }

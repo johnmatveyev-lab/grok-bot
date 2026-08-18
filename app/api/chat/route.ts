@@ -1,15 +1,13 @@
 import { NextRequest } from "next/server";
-import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { resolveLlm, streamAnthropic, streamOpenAI } from "@/lib/llm";
 import { buildSystemPrompt } from "@/lib/system-prompt";
-import { COMPUTER_TOOLS } from "@/lib/tools";
 import type { Chat, Plugin, Skill } from "@/lib/types";
 import {
   browseUrl,
   execInWorkspace,
   listDir,
   readFileSafe,
-  resolveApiKeyAsync,
   writeComputerState,
   writeFileSafe,
 } from "@/lib/workspace";
@@ -23,6 +21,10 @@ type Incoming = {
   skills: Skill[];
   plugins: Plugin[];
   userText: string;
+  provider?: string;
+  model?: string;
+  providerKey?: string;
+  baseUrl?: string;
 };
 
 function sse(obj: unknown): string {
@@ -205,21 +207,26 @@ async function demoLoop(body: Incoming, send: (o: unknown) => Promise<void> | vo
 
   await send({
     type: "text",
-    text: `Hey — ${name} here. I can already use the shared computer (files, terminal, browser) from this chat.\n\nGive me a concrete outcome, the sources that matter, and what I must not do without you. Example: “Write a one-page brief to /workspace/drafts/brief.md from this link, cite everything, don’t email anyone.”\n\nTo unlock full Grok 4.6 reasoning, paste an xAI API key in Settings → General.`,
+    text: `Hey — ${name} here. I can already use the shared computer (files, terminal, browser) from this chat.\n\nGive me a concrete outcome, the sources that matter, and what I must not do without you. Example: “Write a one-page brief to /workspace/drafts/brief.md from this link, cite everything, don’t email anyone.”\n\nAdd an API key in Settings → Models to run OpenAI, NVIDIA NIM, Kimi K3, Qwen, OpenRouter, Anthropic, or Grok.`,
   });
 }
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as Incoming;
-  const headerKey = req.headers.get("x-api-key");
-  const apiKey = await resolveApiKeyAsync(headerKey);
+  const llm = await resolveLlm({
+    provider: body.provider,
+    model: body.model,
+    providerKey: body.providerKey,
+    baseUrl: body.baseUrl,
+    headerKey: req.headers.get("x-api-key"),
+  });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(sse(obj)));
       try {
-        if (!apiKey) {
+        if (!llm) {
           await demoLoop(body, send);
           await writeComputerState({ status: "idle" });
           send({ type: "done" });
@@ -227,11 +234,7 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        const client = new OpenAI({
-          apiKey,
-          baseURL: "https://api.x.ai/v1",
-          timeout: 360_000,
-        });
+        send({ type: "model", provider: llm.provider, model: llm.model });
 
         const system = buildSystemPrompt({
           chat: body.chat,
@@ -246,68 +249,75 @@ export async function POST(req: NextRequest) {
         if (prior.at(-1)?.role === "user" && prior.at(-1)?.content === body.userText) {
           prior.pop();
         }
-        const history: ChatCompletionMessageParam[] = [
-          { role: "system", content: system },
-          ...prior.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-          { role: "user", content: body.userText },
-        ];
 
         send({ type: "status", status: "working" });
         await writeComputerState({ status: "working", screenBotId: body.chat.id });
 
-        for (let round = 0; round < 8; round++) {
-          const completion = await client.chat.completions.create({
-            model: "grok-4.6",
-            messages: history,
-            tools: COMPUTER_TOOLS,
-            stream: true,
-          });
-
-          let text = "";
-          const toolAcc: Record<number, { id: string; name: string; args: string }> = {};
-
-          for await (const chunk of completion) {
-            const choice = chunk.choices[0];
-            const delta = choice?.delta;
-            if (delta?.content) {
-              text += delta.content;
-              send({ type: "text", text: delta.content });
-            }
-            if (delta?.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index ?? 0;
-                if (!toolAcc[idx]) toolAcc[idx] = { id: tc.id || `call_${idx}`, name: "", args: "" };
-                if (tc.id) toolAcc[idx].id = tc.id;
-                if (tc.function?.name) toolAcc[idx].name += tc.function.name;
-                if (tc.function?.arguments) toolAcc[idx].args += tc.function.arguments;
+        if (llm.kind === "anthropic") {
+          type AMsg = { role: "user" | "assistant"; content: string | unknown[] };
+          const messages: AMsg[] = [
+            ...prior.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+            { role: "user", content: body.userText },
+          ];
+          for (let round = 0; round < 8; round++) {
+            const { text, calls, raw } = await streamAnthropic({
+              llm,
+              system,
+              messages: messages as Parameters<typeof streamAnthropic>[0]["messages"],
+              onText: (t) => send({ type: "text", text: t }),
+            });
+            if (!calls.length) break;
+            messages.push({ role: "assistant", content: raw });
+            const results: unknown[] = [];
+            for (const call of calls) {
+              let parsed: Record<string, unknown> = {};
+              try {
+                parsed = JSON.parse(call.args || "{}");
+              } catch {
+                parsed = {};
               }
+              send({ type: "tool", id: call.id, name: call.name, status: "running", args: parsed });
+              const result = await runTool(call.name, parsed, send);
+              send({ type: "tool", id: call.id, name: call.name, status: "done", result: result.slice(0, 2000) });
+              results.push({ type: "tool_result", tool_use_id: call.id, content: result });
             }
+            messages.push({ role: "user", content: results });
+            void text;
           }
-
-          const calls = Object.values(toolAcc).filter((t) => t.name);
-          if (!calls.length) break;
-
-          history.push({
-            role: "assistant",
-            content: text || null,
-            tool_calls: calls.map((c) => ({
-              id: c.id,
-              type: "function" as const,
-              function: { name: c.name, arguments: c.args || "{}" },
-            })),
-          });
-
-          for (const call of calls) {
-            let parsed: Record<string, unknown> = {};
-            try {
-              parsed = JSON.parse(call.args || "{}");
-            } catch {
-              parsed = {};
+        } else {
+          const history: ChatCompletionMessageParam[] = [
+            { role: "system", content: system },
+            ...prior.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+            { role: "user", content: body.userText },
+          ];
+          for (let round = 0; round < 8; round++) {
+            const { text, calls } = await streamOpenAI({
+              llm,
+              messages: history,
+              onText: (t) => send({ type: "text", text: t }),
+            });
+            if (!calls.length) break;
+            history.push({
+              role: "assistant",
+              content: text || null,
+              tool_calls: calls.map((c) => ({
+                id: c.id,
+                type: "function" as const,
+                function: { name: c.name, arguments: c.args || "{}" },
+              })),
+            });
+            for (const call of calls) {
+              let parsed: Record<string, unknown> = {};
+              try {
+                parsed = JSON.parse(call.args || "{}");
+              } catch {
+                parsed = {};
+              }
+              send({ type: "tool", id: call.id, name: call.name, status: "running", args: parsed });
+              const result = await runTool(call.name, parsed, send);
+              send({ type: "tool", id: call.id, name: call.name, status: "done", result: result.slice(0, 2000) });
+              history.push({ role: "tool", tool_call_id: call.id, content: result });
             }
-            send({ type: "tool", id: call.id, name: call.name, status: "running", args: parsed });
-            const result = await runTool(call.name, parsed, send);
-            send({ type: "tool", id: call.id, name: call.name, status: "done", result: result.slice(0, 2000) });
-            history.push({ role: "tool", tool_call_id: call.id, content: result });
           }
         }
 

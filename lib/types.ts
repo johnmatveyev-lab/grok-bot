@@ -108,6 +108,8 @@ export type AppSettings = {
   accountName: string;
   apiKeyConfigured: boolean;
   updateTrack: "stable" | "nightly";
+  activeProvider: string;
+  activeModel: string;
 };
 
 export type PersistShape = {

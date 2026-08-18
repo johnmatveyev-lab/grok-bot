@@ -10,9 +10,17 @@ import { ComputerView } from "./ComputerView";
 import { EditProfile } from "./EditProfile";
 import { NewChat } from "./NewChat";
 import { Onboarding } from "./Onboarding";
+import { ModelPicker } from "./ModelPicker";
 import { SettingsModal } from "./SettingsModal";
 import { Sidebar } from "./Sidebar";
 import { BOT_TEMPLATES, blankBot, templateToChat, type BotTemplate } from "@/lib/defaults";
+import {
+  emptyProviderStatus,
+  loadLocalProviderKeys,
+  saveLocalProviderKeys,
+  type ProviderId,
+  type ProviderStatus,
+} from "@/lib/providers";
 import { emptyPersist, loadPersist, savePersist } from "@/lib/storage";
 import type { Chat, ComputerState, Message, PersistShape, Routine } from "@/lib/types";
 import { uid } from "@/lib/uid";
@@ -42,6 +50,8 @@ export function App() {
   const [editOpen, setEditOpen] = useState(false);
   const [palette, setPalette] = useState(false);
   const [ctx, setCtx] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [providerStatus, setProviderStatus] = useState<Record<ProviderId, ProviderStatus>>(emptyProviderStatus);
+  const [settingsTab, setSettingsTab] = useState<"General" | "Models" | undefined>(undefined);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -52,10 +62,24 @@ export function App() {
     void fetch("/api/settings")
       .then((r) => r.json())
       .then((s) => {
+        if (s.providers) setProviderStatus(s.providers);
+        const local = loadLocalProviderKeys();
         setStore((prev) => ({
           ...prev,
-          settings: { ...prev.settings, apiKeyConfigured: Boolean(s.apiKeyConfigured) },
+          settings: {
+            ...prev.settings,
+            apiKeyConfigured: Boolean(s.apiKeyConfigured) || Object.values(local).some((c) => Boolean(c?.key)),
+            activeProvider: prev.settings.activeProvider || s.activeProvider || "xai",
+            activeModel: prev.settings.activeModel || s.providers?.[s.activeProvider || "xai"]?.model || prev.settings.activeModel,
+          },
         }));
+        setProviderStatus((prev) => {
+          const next = { ...prev, ...(s.providers || {}) };
+          for (const [id, cfg] of Object.entries(local)) {
+            if (cfg?.key && next[id as ProviderId]) next[id as ProviderId] = { ...next[id as ProviderId], configured: true, model: cfg.model || next[id as ProviderId].model };
+          }
+          return next;
+        });
       })
       .catch(() => undefined);
     void fetch("/api/computer?op=state")
@@ -201,6 +225,10 @@ export function App() {
           skills: store.skills,
           plugins: store.plugins,
           userText: text,
+          provider: store.settings.activeProvider,
+          model: store.settings.activeModel,
+          providerKey: loadLocalProviderKeys()[store.settings.activeProvider as ProviderId]?.key,
+          baseUrl: loadLocalProviderKeys()[store.settings.activeProvider as ProviderId]?.baseUrl,
         }),
       });
       if (!res.body) throw new Error("No response stream");
@@ -432,6 +460,23 @@ export function App() {
               onOpenComputer={() => setComputerOpen(true)}
               onMenu={() => setEditOpen(true)}
               onStop={stop}
+              modelPicker={
+                <ModelPicker
+                  provider={store.settings.activeProvider}
+                  model={store.settings.activeModel}
+                  status={providerStatus}
+                  onChange={(id, model) =>
+                    setStore((s) => ({
+                      ...s,
+                      settings: { ...s.settings, activeProvider: id, activeModel: model },
+                    }))
+                  }
+                  onAddKeys={() => {
+                    setSettingsTab("Models");
+                    setSettingsOpen(true);
+                  }}
+                />
+              }
               onReact={(messageId, emoji) =>
                 patchChat(active.id, (c) => ({
                   ...c,
@@ -467,9 +512,12 @@ export function App() {
               {!store.settings.apiKeyConfigured && (
                 <button
                   className="mt-2 w-full text-center text-[11.5px] text-[var(--dim)] hover:text-[var(--muted)]"
-                  onClick={() => setSettingsOpen(true)}
+                  onClick={() => {
+                    setSettingsTab("Models");
+                    setSettingsOpen(true);
+                  }}
                 >
-                  Local mode — add an xAI API key in Settings for Grok 4.6
+                  Local mode — add an API key in Settings → Models
                 </button>
               )}
             </div>
@@ -521,18 +569,69 @@ export function App() {
         settings={store.settings}
         plugins={store.plugins}
         skills={store.skills}
-        apiConfigured={store.settings.apiKeyConfigured}
-        onClose={() => setSettingsOpen(false)}
+        providerStatus={providerStatus}
+        initialTab={settingsTab}
+        onClose={() => {
+          setSettingsOpen(false);
+          setSettingsTab(undefined);
+        }}
         onSettings={(p) => setStore((s) => ({ ...s, settings: { ...s.settings, ...p } }))}
         onPlugins={(plugins) => setStore((s) => ({ ...s, plugins }))}
         onSkills={(skills) => setStore((s) => ({ ...s, skills }))}
-        onSaveKey={async (key) => {
-          await fetch("/api/settings", {
+        onUseProvider={(id, model) =>
+          setStore((s) => ({
+            ...s,
+            settings: { ...s.settings, activeProvider: id, activeModel: model, apiKeyConfigured: true },
+          }))
+        }
+        onSaveProvider={async (id, data) => {
+          const local = loadLocalProviderKeys();
+          if (data.clear) {
+            const next = { ...local };
+            if (next[id]) {
+              const { key: _k, ...rest } = next[id]!;
+              next[id] = rest;
+            }
+            saveLocalProviderKeys(next);
+          } else {
+            saveLocalProviderKeys({
+              ...local,
+              [id]: {
+                ...local[id],
+                ...(data.key ? { key: data.key } : {}),
+                ...(data.model ? { model: data.model } : {}),
+                ...(data.baseUrl ? { baseUrl: data.baseUrl } : {}),
+              },
+            });
+          }
+          const res = await fetch("/api/settings", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ apiKey: key }),
+            body: JSON.stringify({ provider: id, ...data }),
           });
-          setStore((s) => ({ ...s, settings: { ...s.settings, apiKeyConfigured: Boolean(key.trim()) } }));
+          const json = await res.json().catch(() => ({}));
+          if (json.providers) setProviderStatus(json.providers);
+          else {
+            setProviderStatus((prev) => ({
+              ...prev,
+              [id]: {
+                ...prev[id],
+                configured: data.clear ? false : Boolean(data.key) || prev[id].configured,
+                model: data.model || prev[id].model,
+                baseUrl: data.baseUrl || prev[id].baseUrl,
+              },
+            }));
+          }
+          const listed = (json.providers || providerStatus) as Record<string, ProviderStatus>;
+          const any = Object.values(listed).some((s) => s.configured) || Boolean(data.key && !data.clear);
+          setStore((s) => ({
+            ...s,
+            settings: {
+              ...s.settings,
+              apiKeyConfigured: Boolean(json.apiKeyConfigured ?? any),
+              activeModel: data.model || s.settings.activeModel,
+            },
+          }));
         }}
       />
 

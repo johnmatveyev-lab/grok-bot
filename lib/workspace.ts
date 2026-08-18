@@ -192,7 +192,15 @@ export async function writeComputerState(partial: Partial<ComputerState>): Promi
   return next;
 }
 
-export async function readSettingsFile(): Promise<{ apiKey?: string; theme?: string; accountName?: string }> {
+export type SavedSettings = {
+  apiKey?: string;
+  theme?: string;
+  accountName?: string;
+  activeProvider?: string;
+  providers?: Record<string, { key?: string; model?: string; baseUrl?: string }>;
+};
+
+export async function readSettingsFile(): Promise<SavedSettings> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
     return JSON.parse(await fs.readFile(path.join(DATA_DIR, "settings.json"), "utf8"));
@@ -215,5 +223,5 @@ export async function resolveApiKeyAsync(headerKey?: string | null): Promise<str
   if (headerKey) return headerKey;
   if (process.env.XAI_API_KEY) return process.env.XAI_API_KEY;
   const s = await readSettingsFile();
-  return s.apiKey || undefined;
+  return s.apiKey || s.providers?.xai?.key || undefined;
 }
