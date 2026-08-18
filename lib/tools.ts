@@ -1,3 +1,5 @@
+import { PLUGIN_TOOL_LABELS } from "./plugins";
+
 export const COMPUTER_TOOLS = [
   {
     type: "function" as const,
@@ -159,6 +161,7 @@ export function prettyToolName(name: string): string {
     create_skill: "Saving a skill",
     request_approval: "Asking for approval",
     message_bot: "Messaging a Bot",
+    ...PLUGIN_TOOL_LABELS,
   };
   return map[name] || name.replace(/_/g, " ");
 }

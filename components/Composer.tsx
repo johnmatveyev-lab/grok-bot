@@ -2,16 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, AtSign, Paperclip, Slash } from "lucide-react";
-import type { Chat, Skill } from "@/lib/types";
+import type { Chat, Plugin, Skill } from "@/lib/types";
 
 export function Composer({
   chats,
   skills,
+  plugins,
   disabled,
   onSend,
 }: {
   chats: Chat[];
   skills: Skill[];
+  plugins?: Plugin[];
   disabled?: boolean;
   onSend: (text: string, extras?: { attachments?: { name: string; text?: string }[] }) => void;
 }) {
@@ -52,7 +54,12 @@ export function Composer({
     <div className="relative">
       {menu === "@" && (
         <Suggest
-          items={chats.filter((c) => c.kind === "bot").map((c) => ({ id: c.id, label: c.name, hint: c.title || "Bot" }))}
+          items={[
+            ...chats.filter((c) => c.kind === "bot").map((c) => ({ id: c.id, label: c.name, hint: c.title || "Bot" })),
+            ...(plugins || [])
+              .filter((p) => p.installed && p.authenticated)
+              .map((p) => ({ id: `plug-${p.id}`, label: p.name, hint: "Plugin" })),
+          ]}
           onPick={(label) => {
             setText((t) => t.replace(/@$/, `@${label} `));
             setMenu(null);
@@ -74,7 +81,7 @@ export function Composer({
           rows={1}
           value={text}
           disabled={disabled}
-          placeholder="Message like a teammate. @ a Bot, / a skill."
+          placeholder="Message like a teammate. @ a Bot or plugin, / a skill."
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {

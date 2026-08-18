@@ -198,6 +198,7 @@ export type SavedSettings = {
   accountName?: string;
   activeProvider?: string;
   providers?: Record<string, { key?: string; model?: string; baseUrl?: string }>;
+  pluginCreds?: Record<string, Record<string, string>>;
 };
 
 export async function readSettingsFile(): Promise<SavedSettings> {

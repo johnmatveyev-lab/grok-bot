@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AppSettings, Plugin, Skill, Theme } from "@/lib/types";
 import { PROVIDERS, type ProviderId, type ProviderStatus } from "@/lib/providers";
+import { PluginsPanel } from "./PluginsPanel";
 
 const TABS = ["General", "Models", "Plugins", "Team Setup", "Appearance", "Updates"] as const;
 type Tab = (typeof TABS)[number];
@@ -14,11 +15,13 @@ export function SettingsModal({
   skills,
   onClose,
   onSettings,
-  onPlugins,
   onSkills,
   providerStatus,
   onSaveProvider,
   onUseProvider,
+  onInstallPlugin,
+  onConnectPlugin,
+  onDisconnectPlugin,
   initialTab,
 }: {
   open: boolean;
@@ -27,24 +30,22 @@ export function SettingsModal({
   skills: Skill[];
   onClose: () => void;
   onSettings: (p: Partial<AppSettings>) => void;
-  onPlugins: (p: Plugin[]) => void;
   onSkills: (s: Skill[]) => void;
   providerStatus: Record<ProviderId, ProviderStatus>;
   onSaveProvider: (id: ProviderId, data: { key?: string; model?: string; baseUrl?: string; clear?: boolean }) => Promise<void>;
   onUseProvider: (id: ProviderId, model: string) => void;
+  onInstallPlugin: (id: string, installed: boolean) => void;
+  onConnectPlugin: (id: string, creds: Record<string, string>) => Promise<{ ok: boolean; label?: string; error?: string }>;
+  onDisconnectPlugin: (id: string) => Promise<void>;
   initialTab?: Tab;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab || "General");
-  const [q, setQ] = useState("");
-  const [plugView, setPlugView] = useState<"Marketplace" | "Yours">("Marketplace");
 
   useEffect(() => {
     if (open && initialTab) setTab(initialTab);
   }, [open, initialTab]);
 
   if (!open) return null;
-
-  const filtered = plugins.filter((p) => `${p.name} ${p.description} ${p.category}`.toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="modal-back" onClick={onClose}>
@@ -93,102 +94,34 @@ export function SettingsModal({
           )}
 
           {tab === "Plugins" && (
-            <section>
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-[18px] font-semibold tracking-[-0.03em]">Plugins</h2>
-                  <p className="mt-1 text-[12.5px] text-[var(--muted)]">Connectors and private skills. Type @ in chat to attach one.</p>
-                </div>
-                <div className="flex rounded-full bg-[var(--bg-4)] p-0.5 text-[12px]">
-                  {(["Marketplace", "Yours"] as const).map((v) => (
-                    <button
-                      key={v}
-                      className={`rounded-full px-3 py-1 ${plugView === v ? "bg-[var(--bg-3)]" : "text-[var(--muted)]"}`}
-                      onClick={() => setPlugView(v)}
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
+            <>
+              <PluginsPanel
+                plugins={plugins}
+                onInstall={onInstallPlugin}
+                onConnect={onConnectPlugin}
+                onDisconnect={onDisconnectPlugin}
+              />
+              <div className="mt-6">
+                <div className="mb-2 text-[12px] font-medium">Private skills</div>
+                {skills.map((s) => (
+                  <div key={s.id} className="mb-2 rounded-xl border border-[var(--line)] p-3">
+                    <input
+                      className="bg-transparent text-[13px] font-medium outline-none"
+                      value={s.name}
+                      onChange={(e) => onSkills(skills.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)))}
+                    />
+                    <textarea
+                      className="mt-1 w-full resize-none bg-transparent text-[12px] text-[var(--muted)] outline-none"
+                      rows={2}
+                      value={s.instructions}
+                      onChange={(e) =>
+                        onSkills(skills.map((x) => (x.id === s.id ? { ...x, instructions: e.target.value } : x)))
+                      }
+                    />
+                  </div>
+                ))}
               </div>
-              <input className="field mt-4" placeholder="Search plugins" value={q} onChange={(e) => setQ(e.target.value)} />
-              {plugView === "Marketplace" && (
-                <div className="mt-4 grid gap-2">
-                  {filtered.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between rounded-2xl border border-[var(--line)] p-3">
-                      <div>
-                        <div className="text-[13.5px] font-medium">{p.name}</div>
-                        <div className="text-[12px] text-[var(--muted)]">
-                          {p.category} · {p.description}
-                        </div>
-                      </div>
-                      <button
-                        className="h-8 rounded-full border border-[var(--line-2)] px-3 text-[12px]"
-                        onClick={() =>
-                          onPlugins(
-                            plugins.map((x) =>
-                              x.id === p.id
-                                ? { ...x, installed: !x.installed, authenticated: !x.installed }
-                                : x
-                            )
-                          )
-                        }
-                      >
-                        {p.installed ? "Uninstall" : "Add"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {plugView === "Yours" && (
-                <div className="mt-4 space-y-5">
-                  <div>
-                    <div className="mb-2 text-[12px] font-medium">Installed</div>
-                    {plugins.filter((p) => p.installed).map((p) => (
-                      <div key={p.id} className="flex items-center justify-between rounded-xl py-2">
-                        <div>
-                          <div className="text-[13px]">{p.name}</div>
-                          <div className="text-[11px] text-[var(--muted)]">
-                            {p.authenticated ? "Connected" : "Needs sign-in"}
-                          </div>
-                        </div>
-                        {!p.authenticated && (
-                          <button
-                            className="text-[12px] text-link"
-                            onClick={() => onPlugins(plugins.map((x) => (x.id === p.id ? { ...x, authenticated: true } : x)))}
-                          >
-                            Authenticate
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {!plugins.some((p) => p.installed) && (
-                      <p className="text-[12px] text-[var(--dim)]">Nothing installed yet.</p>
-                    )}
-                  </div>
-                  <div>
-                    <div className="mb-2 text-[12px] font-medium">Private skills</div>
-                    {skills.map((s) => (
-                      <div key={s.id} className="rounded-xl border border-[var(--line)] p-3 mb-2">
-                        <input
-                          className="bg-transparent text-[13px] font-medium outline-none"
-                          value={s.name}
-                          onChange={(e) => onSkills(skills.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)))}
-                        />
-                        <textarea
-                          className="mt-1 w-full resize-none bg-transparent text-[12px] text-[var(--muted)] outline-none"
-                          rows={2}
-                          value={s.instructions}
-                          onChange={(e) =>
-                            onSkills(skills.map((x) => (x.id === s.id ? { ...x, instructions: e.target.value } : x)))
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
+            </>
           )}
 
           {tab === "Team Setup" && (

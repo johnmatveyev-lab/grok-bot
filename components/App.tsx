@@ -21,6 +21,7 @@ import {
   type ProviderId,
   type ProviderStatus,
 } from "@/lib/providers";
+import { loadPluginCreds, setPluginCred } from "@/lib/plugins";
 import { emptyPersist, loadPersist, savePersist } from "@/lib/storage";
 import type { Chat, ComputerState, Message, PersistShape, Routine } from "@/lib/types";
 import { uid } from "@/lib/uid";
@@ -80,6 +81,30 @@ export function App() {
           }
           return next;
         });
+      })
+      .catch(() => undefined);
+    const localCreds = loadPluginCreds();
+    if (Object.keys(localCreds).length) {
+      setStore((prev) => ({
+        ...prev,
+        plugins: prev.plugins.map((p) =>
+          localCreds[p.id] && Object.values(localCreds[p.id]).some(Boolean)
+            ? { ...p, installed: true, authenticated: true }
+            : p
+        ),
+      }));
+    }
+    void fetch("/api/plugins")
+      .then((r) => r.json())
+      .then((s) => {
+        if (!s.plugins) return;
+        setStore((prev) => ({
+          ...prev,
+          plugins: prev.plugins.map((p) => {
+            const hit = (s.plugins as { id: string; connected?: boolean }[]).find((x) => x.id === p.id);
+            return hit?.connected ? { ...p, installed: true, authenticated: true } : p;
+          }),
+        }));
       })
       .catch(() => undefined);
     void fetch("/api/computer?op=state")
@@ -229,6 +254,7 @@ export function App() {
           model: store.settings.activeModel,
           providerKey: loadLocalProviderKeys()[store.settings.activeProvider as ProviderId]?.key,
           baseUrl: loadLocalProviderKeys()[store.settings.activeProvider as ProviderId]?.baseUrl,
+          pluginCreds: loadPluginCreds(),
         }),
       });
       if (!res.body) throw new Error("No response stream");
@@ -508,7 +534,13 @@ export function App() {
               {!active.messages.length && !active.working && (
                 <FirstTasks chat={active} onPick={(t) => void send(t)} />
               )}
-              <Composer chats={store.chats} skills={store.skills} disabled={active.working} onSend={(t, e) => void send(t, e)} />
+              <Composer
+                chats={store.chats}
+                skills={store.skills}
+                plugins={store.plugins}
+                disabled={active.working}
+                onSend={(t, e) => void send(t, e)}
+              />
               {!store.settings.apiKeyConfigured && (
                 <button
                   className="mt-2 w-full text-center text-[11.5px] text-[var(--dim)] hover:text-[var(--muted)]"
@@ -576,8 +608,54 @@ export function App() {
           setSettingsTab(undefined);
         }}
         onSettings={(p) => setStore((s) => ({ ...s, settings: { ...s.settings, ...p } }))}
-        onPlugins={(plugins) => setStore((s) => ({ ...s, plugins }))}
         onSkills={(skills) => setStore((s) => ({ ...s, skills }))}
+        onInstallPlugin={(id, installed) => {
+          if (!installed) setPluginCred(id, null);
+          setStore((s) => ({
+            ...s,
+            plugins: s.plugins.map((p) =>
+              p.id === id ? { ...p, installed, authenticated: installed ? p.authenticated : false } : p
+            ),
+          }));
+          if (!installed) {
+            void fetch("/api/plugins", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id, op: "clear" }),
+            });
+          }
+        }}
+        onConnectPlugin={async (id, creds) => {
+          const existing = loadPluginCreds()[id] || {};
+          const merged = { ...existing };
+          for (const [k, v] of Object.entries(creds)) if (v.trim()) merged[k] = v.trim();
+          const res = await fetch("/api/plugins", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, creds: merged }),
+          });
+          const json = await res.json().catch(() => ({ ok: false, error: "Request failed" }));
+          if (json.ok) {
+            setPluginCred(id, merged);
+            setStore((s) => ({
+              ...s,
+              plugins: s.plugins.map((p) => (p.id === id ? { ...p, installed: true, authenticated: true } : p)),
+            }));
+          }
+          return json;
+        }}
+        onDisconnectPlugin={async (id) => {
+          setPluginCred(id, null);
+          setStore((s) => ({
+            ...s,
+            plugins: s.plugins.map((p) => (p.id === id ? { ...p, authenticated: false } : p)),
+          }));
+          await fetch("/api/plugins", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, op: "clear" }),
+          });
+        }}
         onUseProvider={(id, model) =>
           setStore((s) => ({
             ...s,

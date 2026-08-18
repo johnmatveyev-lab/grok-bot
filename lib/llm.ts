@@ -44,6 +44,15 @@ export async function resolveLlm(opts: {
 
 export const OPENAI_TOOLS = COMPUTER_TOOLS;
 
+export type LlmTool = {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+};
+
 export const ANTHROPIC_TOOLS = COMPUTER_TOOLS.map((t) => ({
   name: t.function.name,
   description: t.function.description,
@@ -62,13 +71,15 @@ export function makeOpenAIClient(llm: ResolvedLlm): OpenAI {
 export async function streamOpenAI(opts: {
   llm: ResolvedLlm;
   messages: ChatCompletionMessageParam[];
+  tools?: LlmTool[];
   onText: (t: string) => void;
 }): Promise<{ text: string; calls: { id: string; name: string; args: string }[] }> {
+  const tools = (opts.tools?.length ? opts.tools : OPENAI_TOOLS) as LlmTool[];
   const client = makeOpenAIClient(opts.llm);
   const completion = await client.chat.completions.create({
     model: opts.llm.model,
     messages: opts.messages,
-    tools: OPENAI_TOOLS,
+    tools,
     stream: true,
   });
 
@@ -107,8 +118,15 @@ export async function streamAnthropic(opts: {
   llm: ResolvedLlm;
   system: string;
   messages: AnthropicMessage[];
+  tools?: LlmTool[];
   onText: (t: string) => void;
 }): Promise<{ text: string; calls: { id: string; name: string; args: string }[]; raw: AnthropicBlock[] }> {
+  const openaiTools = (opts.tools?.length ? opts.tools : OPENAI_TOOLS) as LlmTool[];
+  const tools = openaiTools.map((t) => ({
+    name: t.function.name,
+    description: t.function.description,
+    input_schema: t.function.parameters as Record<string, unknown>,
+  }));
   const res = await fetch(`${opts.llm.baseUrl}/v1/messages`, {
     method: "POST",
     headers: {
@@ -121,7 +139,7 @@ export async function streamAnthropic(opts: {
       max_tokens: 8192,
       system: opts.system,
       messages: opts.messages,
-      tools: ANTHROPIC_TOOLS,
+      tools,
       stream: true,
     }),
   });

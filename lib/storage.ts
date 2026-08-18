@@ -1,6 +1,7 @@
 "use client";
 
-import { DEFAULT_PLUGINS, DEFAULT_SKILLS } from "./defaults";
+import { DEFAULT_SKILLS } from "./defaults";
+import { catalogAsPlugins } from "./plugins";
 import type { PersistShape } from "./types";
 
 const KEY = "grok-bot-v1";
@@ -21,7 +22,7 @@ export function emptyPersist(): PersistShape {
     activeId: null,
     pinnedIds: [],
     skills: DEFAULT_SKILLS,
-    plugins: DEFAULT_PLUGINS,
+    plugins: catalogAsPlugins(),
   };
 }
 
@@ -36,6 +37,7 @@ export function loadPersist(): PersistShape {
       ...emptyPersist(),
       ...parsed,
       settings: { ...emptyPersist().settings, ...parsed.settings },
+      plugins: catalogAsPlugins(parsed.plugins || []),
     };
   } catch {
     return emptyPersist();

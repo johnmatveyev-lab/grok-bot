@@ -1,13 +1,17 @@
 import { NextRequest } from "next/server";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { resolveLlm, streamAnthropic, streamOpenAI } from "@/lib/llm";
+import { isPluginTool, toolsForPlugins } from "@/lib/plugins";
+import { runPluginTool } from "@/lib/plugin-runtime";
 import { buildSystemPrompt } from "@/lib/system-prompt";
+import { COMPUTER_TOOLS } from "@/lib/tools";
 import type { Chat, Plugin, Skill } from "@/lib/types";
 import {
   browseUrl,
   execInWorkspace,
   listDir,
   readFileSafe,
+  readSettingsFile,
   writeComputerState,
   writeFileSafe,
 } from "@/lib/workspace";
@@ -25,6 +29,7 @@ type Incoming = {
   model?: string;
   providerKey?: string;
   baseUrl?: string;
+  pluginCreds?: Record<string, Record<string, string>>;
 };
 
 function sse(obj: unknown): string {
@@ -34,7 +39,8 @@ function sse(obj: unknown): string {
 async function runTool(
   name: string,
   args: Record<string, unknown>,
-  send: (o: unknown) => void
+  send: (o: unknown) => void,
+  pluginCreds: Record<string, Record<string, string>> = {}
 ): Promise<string> {
   try {
     if (name === "list_files") {
@@ -113,16 +119,46 @@ async function runTool(
       send({ type: "handoff", handoff });
       return `Queued a message to ${handoff.bot}.`;
     }
+    if (isPluginTool(name)) {
+      return await runPluginTool(name, args, pluginCreds);
+    }
     return `Unknown tool ${name}`;
   } catch (e) {
     return `Error: ${e instanceof Error ? e.message : "tool failed"}`;
   }
 }
 
-async function demoLoop(body: Incoming, send: (o: unknown) => Promise<void> | void) {
+async function demoLoop(
+  body: Incoming,
+  send: (o: unknown) => Promise<void> | void,
+  pluginCreds: Record<string, Record<string, string>> = {}
+) {
   const text = body.userText.toLowerCase();
   const name = body.chat.name;
   await send({ type: "status", status: "working" });
+
+  const pluginHint: [RegExp, string, Record<string, unknown>][] = [
+    [/gmail|inbox|email/, "gmail_list_messages", {}],
+    [/slack|channel/, "slack_list_channels", {}],
+    [/github|repo|pull request|\bpr\b/, "github_whoami", {}],
+    [/linear/, "linear_viewer", {}],
+    [/notion/, "notion_search", { query: "" }],
+    [/calendar|meeting|hold/, "calendar_events", {}],
+    [/zendesk|ticket/, "zendesk_list_tickets", {}],
+    [/stripe|invoice|balance/, "stripe_balance", {}],
+    [/salesforce|soql|crm/, "salesforce_describe", {}],
+    [/linkedin/, "linkedin_get_me", {}],
+  ];
+  for (const [re, tool, args] of pluginHint) {
+    const plugin = tool.split("_")[0];
+    if (re.test(text) && pluginCreds[plugin]) {
+      await send({ type: "tool", id: "p1", name: tool, status: "running", args });
+      const result = await runTool(tool, args, send, pluginCreds);
+      await send({ type: "tool", id: "p1", name: tool, status: "done", result: result.slice(0, 2000) });
+      await send({ type: "text", text: result.slice(0, 3500) });
+      return;
+    }
+  }
 
   const wantsWrite = /write|create|save|draft|template|agreement|markdown|\.md/.test(text);
   const wantsList = /\b(ls|list files|list the files|what's in)\b/.test(text) || (/\/workspace/.test(text) && !wantsWrite);
@@ -213,6 +249,11 @@ async function demoLoop(body: Incoming, send: (o: unknown) => Promise<void> | vo
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as Incoming;
+  const saved = await readSettingsFile();
+  const pluginCreds: Record<string, Record<string, string>> = {
+    ...(saved.pluginCreds || {}),
+    ...(body.pluginCreds || {}),
+  };
   const llm = await resolveLlm({
     provider: body.provider,
     model: body.model,
@@ -220,6 +261,8 @@ export async function POST(req: NextRequest) {
     baseUrl: body.baseUrl,
     headerKey: req.headers.get("x-api-key"),
   });
+  const extraTools = toolsForPlugins(body.plugins || []);
+  const allTools = [...COMPUTER_TOOLS, ...extraTools] as import("@/lib/llm").LlmTool[];
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -227,7 +270,7 @@ export async function POST(req: NextRequest) {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(sse(obj)));
       try {
         if (!llm) {
-          await demoLoop(body, send);
+          await demoLoop(body, send, pluginCreds);
           await writeComputerState({ status: "idle" });
           send({ type: "done" });
           controller.close();
@@ -263,6 +306,7 @@ export async function POST(req: NextRequest) {
             const { text, calls, raw } = await streamAnthropic({
               llm,
               system,
+              tools: allTools,
               messages: messages as Parameters<typeof streamAnthropic>[0]["messages"],
               onText: (t) => send({ type: "text", text: t }),
             });
@@ -277,7 +321,7 @@ export async function POST(req: NextRequest) {
                 parsed = {};
               }
               send({ type: "tool", id: call.id, name: call.name, status: "running", args: parsed });
-              const result = await runTool(call.name, parsed, send);
+              const result = await runTool(call.name, parsed, send, pluginCreds);
               send({ type: "tool", id: call.id, name: call.name, status: "done", result: result.slice(0, 2000) });
               results.push({ type: "tool_result", tool_use_id: call.id, content: result });
             }
@@ -294,6 +338,7 @@ export async function POST(req: NextRequest) {
             const { text, calls } = await streamOpenAI({
               llm,
               messages: history,
+              tools: allTools,
               onText: (t) => send({ type: "text", text: t }),
             });
             if (!calls.length) break;
@@ -314,7 +359,7 @@ export async function POST(req: NextRequest) {
                 parsed = {};
               }
               send({ type: "tool", id: call.id, name: call.name, status: "running", args: parsed });
-              const result = await runTool(call.name, parsed, send);
+              const result = await runTool(call.name, parsed, send, pluginCreds);
               send({ type: "tool", id: call.id, name: call.name, status: "done", result: result.slice(0, 2000) });
               history.push({ role: "tool", tool_call_id: call.id, content: result });
             }

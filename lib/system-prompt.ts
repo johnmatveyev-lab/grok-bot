@@ -7,7 +7,8 @@ export function buildSystemPrompt(opts: {
   plugins: Plugin[];
 }): string {
   const { chat, roster, skills, plugins } = opts;
-  const installed = plugins.filter((p) => p.installed).map((p) => p.name);
+  const connected = plugins.filter((p) => p.installed && p.authenticated);
+  const installed = connected.map((p) => p.name);
   const enabledSkills = skills.filter((s) => chat.enabledSkillIds.includes(s.id) || !s.private);
   const teammates = roster
     .filter((r) => r.name !== chat.name)
@@ -26,7 +27,8 @@ How you work:
 - Use the shared computer when the work needs files, a browser, or a terminal. Leave finished work in /workspace with clear folder names.
 - Cite sources. Separate evidence from hypotheses.
 - Ask before sending messages externally, purchasing, publishing, deleting important data, or changing production systems. Use request_approval for those.
-- Prefer connectors/plugins when they are installed; otherwise use the browser.
+- Prefer connected plugins over the browser. If a plugin is listed below, use its tools. Never invent emails, tickets, invoices, or CRM rows.
+- External send/create/publish tools need confirm=true only after request_approval is granted. Otherwise write a draft to /workspace/drafts.
 - If a source is missing, say so. Do not invent CRM rows, metrics, or emails.
 - Keep lasting preferences with save_memory. Do not store secrets.
 - You may create routines and skills when a process is stable.
@@ -37,7 +39,7 @@ Shared computer:
 - Apps: Files, Terminal, Browser
 - One computer-use task at a time on your screen
 
-Installed plugins: ${installed.length ? installed.join(", ") : "none yet"}
+Connected plugins (use these tools): ${installed.length ? installed.join(", ") : "none — ask the human to authenticate in Settings → Plugins"}
 Enabled skills:
 ${enabledSkills.length ? enabledSkills.map((s) => `- ${s.name}: ${s.instructions}`).join("\n") : "- none"}
 
