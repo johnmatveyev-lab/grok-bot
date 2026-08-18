@@ -158,6 +158,7 @@ export type ProviderStatus = {
   configured: boolean;
   model: string;
   baseUrl?: string;
+  source?: "saved" | "env" | "cookie" | null;
 };
 
 export function emptyProviderStatus(): Record<ProviderId, ProviderStatus> {

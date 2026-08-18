@@ -65,15 +65,31 @@ export function App() {
       .then((s) => {
         if (s.providers) setProviderStatus(s.providers);
         const local = loadLocalProviderKeys();
-        setStore((prev) => ({
-          ...prev,
-          settings: {
-            ...prev.settings,
-            apiKeyConfigured: Boolean(s.apiKeyConfigured) || Object.values(local).some((c) => Boolean(c?.key)),
-            activeProvider: prev.settings.activeProvider || s.activeProvider || "xai",
-            activeModel: prev.settings.activeModel || s.providers?.[s.activeProvider || "xai"]?.model || prev.settings.activeModel,
-          },
-        }));
+        const mergedStatus = { ...(s.providers || {}) };
+        for (const [id, cfg] of Object.entries(local)) {
+          if (cfg?.key && mergedStatus[id]) {
+            mergedStatus[id] = { ...mergedStatus[id], configured: true, model: cfg.model || mergedStatus[id].model };
+          }
+        }
+        setStore((prev) => {
+          const current = prev.settings.activeProvider || s.activeProvider || "xai";
+          const currentOk = Boolean(mergedStatus[current]?.configured);
+          const firstOk = Object.entries(mergedStatus).find(([, st]) => (st as { configured?: boolean })?.configured)?.[0] || current;
+          const chosen = currentOk ? current : firstOk;
+          return {
+            ...prev,
+            settings: {
+              ...prev.settings,
+              apiKeyConfigured: Boolean(s.apiKeyConfigured) || Object.values(local).some((c) => Boolean(c?.key)),
+              activeProvider: chosen,
+              activeModel:
+                mergedStatus[chosen]?.model ||
+                prev.settings.activeModel ||
+                s.providers?.[chosen]?.model ||
+                prev.settings.activeModel,
+            },
+          };
+        });
         setProviderStatus((prev) => {
           const next = { ...prev, ...(s.providers || {}) };
           for (const [id, cfg] of Object.entries(local)) {
@@ -253,6 +269,11 @@ export function App() {
           provider: store.settings.activeProvider,
           model: store.settings.activeModel,
           providerKey: loadLocalProviderKeys()[store.settings.activeProvider as ProviderId]?.key,
+          providerKeys: Object.fromEntries(
+            Object.entries(loadLocalProviderKeys())
+              .filter(([, cfg]) => Boolean(cfg?.key))
+              .map(([id, cfg]) => [id, String(cfg?.key)])
+          ),
           baseUrl: loadLocalProviderKeys()[store.settings.activeProvider as ProviderId]?.baseUrl,
           pluginCreds: loadPluginCreds(),
         }),
@@ -664,6 +685,17 @@ export function App() {
         }
         onSaveProvider={async (id, data) => {
           const local = loadLocalProviderKeys();
+          if (data.key && !data.clear) {
+            setStore((s) => ({
+              ...s,
+              settings: {
+                ...s.settings,
+                activeProvider: id,
+                activeModel: data.model || s.settings.activeModel,
+                apiKeyConfigured: true,
+              },
+            }));
+          }
           if (data.clear) {
             const next = { ...local };
             if (next[id]) {
@@ -685,7 +717,11 @@ export function App() {
           const res = await fetch("/api/settings", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ provider: id, ...data }),
+            body: JSON.stringify({
+              provider: id,
+              activeProvider: data.clear ? undefined : id,
+              ...data,
+            }),
           });
           const json = await res.json().catch(() => ({}));
           if (json.providers) setProviderStatus(json.providers);

@@ -336,7 +336,7 @@ function ProviderCard({
           <p className="mt-0.5 text-[12px] text-[var(--muted)]">{def.hint}</p>
         </div>
         <span className={`pill ${status?.configured ? "live" : ""}`}>
-          {status?.configured ? "Connected" : "No key"}
+          {status?.configured ? `Connected${status.source ? ` · ${status.source}` : ""}` : "No key"}
         </span>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -400,6 +400,27 @@ function ProviderCard({
           onClick={() => onUse(def.id, chosen === "__custom" ? custom.trim() || def.defaultModel : chosen)}
         >
           Use this
+        </button>
+        <button
+          className="h-8 rounded-full border border-[var(--line-2)] px-3 text-[12px]"
+          onClick={async () => {
+            setNote("Testing…");
+            const res = await fetch("/api/settings", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                op: "probe",
+                provider: def.id,
+                key: key.trim() || undefined,
+                model: chosen === "__custom" ? custom.trim() : chosen,
+              }),
+            });
+            const json = await res.json().catch(() => ({ ok: false, error: "Request failed" }));
+            setNote(json.ok ? `Reachable · ${json.provider}` : String(json.error || "Failed"));
+            setTimeout(() => setNote(""), 4000);
+          }}
+        >
+          Test
         </button>
         {status?.configured && (
           <button

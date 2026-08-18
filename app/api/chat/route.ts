@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { resolveLlm, streamAnthropic, streamOpenAI } from "@/lib/llm";
+import { KEY_COOKIE, parseKeyCookie, resolveLlm, streamAnthropic, streamOpenAI } from "@/lib/llm";
 import { isPluginTool, toolsForPlugins } from "@/lib/plugins";
 import { runPluginTool } from "@/lib/plugin-runtime";
 import { buildSystemPrompt } from "@/lib/system-prompt";
@@ -28,6 +28,7 @@ type Incoming = {
   provider?: string;
   model?: string;
   providerKey?: string;
+  providerKeys?: Record<string, string>;
   baseUrl?: string;
   pluginCreds?: Record<string, Record<string, string>>;
 };
@@ -258,6 +259,8 @@ export async function POST(req: NextRequest) {
     provider: body.provider,
     model: body.model,
     providerKey: body.providerKey,
+    providerKeys: body.providerKeys,
+    cookieKeys: parseKeyCookie(req.cookies.get(KEY_COOKIE)?.value),
     baseUrl: body.baseUrl,
     headerKey: req.headers.get("x-api-key"),
   });
@@ -286,8 +289,8 @@ export async function POST(req: NextRequest) {
           plugins: body.plugins || [],
         });
 
-        const prior = body.chat.messages
-          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim())
+        const prior = (body.chat.messages || [])
+          .filter((m) => (m.role === "user" || m.role === "assistant") && (m.content || "").trim())
           .slice(-24);
         if (prior.at(-1)?.role === "user" && prior.at(-1)?.content === body.userText) {
           prior.pop();
