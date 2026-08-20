@@ -7,3 +7,6 @@ node_modules
 .vercel
 .DS_Store
 tsconfig.tsbuildinfo
+computer/workspace/drafts/*
+!computer/workspace/drafts/.gitkeep
+computer/workspace/**/*.tmp

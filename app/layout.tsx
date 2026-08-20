@@ -4,8 +4,8 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Grok Bot",
-  description: "AI teammates with their own computer — a Grok Bot clone.",
+  title: "Open teammate bots",
+  description: "Named AI teammates that share a computer — files, browser, and terminal. Bring your own model keys.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

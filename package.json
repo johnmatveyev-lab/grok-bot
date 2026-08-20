@@ -1,7 +1,9 @@
 {
-  "name": "grok-bot",
+  "name": "open-teammate-bots",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "license": "MIT",
+  "description": "Named AI teammates that share a computer — files, browser, and terminal. Bring your own model keys.",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",

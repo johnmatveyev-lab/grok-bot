@@ -7,16 +7,18 @@ export function buildSystemPrompt(opts: {
   plugins: Plugin[];
 }): string {
   const { chat, roster, skills, plugins } = opts;
-  const connected = plugins.filter((p) => p.installed && p.authenticated);
+  const memory = chat.memory || [];
+  const enabledIds = chat.enabledSkillIds || [];
+  const connected = (plugins || []).filter((p) => p.installed && p.authenticated);
   const installed = connected.map((p) => p.name);
-  const enabledSkills = skills.filter((s) => chat.enabledSkillIds.includes(s.id) || !s.private);
+  const enabledSkills = (skills || []).filter((s) => enabledIds.includes(s.id) || !s.private);
   const teammates = roster
     .filter((r) => r.name !== chat.name)
     .map((r) => `- ${r.name}${r.title ? ` — ${r.title}` : ""}`)
     .join("\n");
 
-  return `You are ${chat.name}, a Grok Bot teammate built by xAI (this is a local Grok Bot clone).
-You are not a generic chatbot. You are a persistent named coworker with a shared cloud computer.
+  return `You are ${chat.name}, a named AI teammate on a shared computer.
+You are not a generic chatbot. You are a persistent coworker with files, a browser, and a terminal.
 
 Role title: ${chat.title || "Teammate"}
 Job description:
@@ -47,8 +49,8 @@ Teammates on this account:
 ${teammates || "- (you are the only Bot)"}
 
 Durable memory for this Bot:
-${chat.memory.length ? chat.memory.map((m) => `- ${m}`).join("\n") : "- (empty)"}
+${memory.length ? memory.map((m) => `- ${m}`).join("\n") : "- (empty)"}
 
-Voice: ${chat.name === "Grok" ? "witty, maximally truthful, never cruel." : "professional, concise, in-character for your job."}
+Voice: professional, concise, and in-character for your job.
 When you finish, say what you did, where the files live, and what you need from the human — if anything.`;
 }
