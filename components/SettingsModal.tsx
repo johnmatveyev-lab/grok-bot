@@ -67,7 +67,7 @@ export function SettingsModal({
                   <img src="/avatars/you.jpg" alt="" className="avatar" />
                   <div>
                     <div className="text-[14px] font-medium">{settings.accountName}</div>
-                    <div className="text-[12px] text-[var(--muted)]">Local Grok Bot clone</div>
+                    <div className="text-[12px] text-[var(--muted)]">Local open-source teammates</div>
                   </div>
                 </div>
                 <input
@@ -128,7 +128,7 @@ export function SettingsModal({
             <section>
               <h2 className="text-[18px] font-semibold tracking-[-0.03em]">Team Setup</h2>
               <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-[var(--muted)]">
-                Scripts installed on every computer assigned to the current team. This clone keeps a single shared
+                Scripts installed on every computer assigned to the current team. This app keeps a single shared
                 workspace at <code>/workspace</code>.
               </p>
               <div className="mt-4 rounded-2xl border border-dashed border-[var(--line-2)] p-6 text-[13px] text-[var(--muted)]">
@@ -181,7 +181,7 @@ function Updates({
       <h2 className="text-[18px] font-semibold tracking-[-0.03em]">Updates</h2>
       <div className="mt-5 space-y-3">
         <Row
-          title="Update Grok Bot's Computer"
+          title="Update the shared computer"
           body="Moves the box to a fresh instance. Files and logins stay; installed software must be reinstalled."
           action={confirm === "update" ? "Click Again to Confirm" : "Update"}
           onClick={() => {
@@ -193,14 +193,14 @@ function Updates({
           }}
         />
         <Row
-          title="Reset Grok Bot's Computer"
+          title="Reset the shared computer"
           body="Restores the last saved snapshot and can lose recent unsynced work. Prefer Update."
           action="Reset"
           danger
           onClick={() => {
             if (confirm !== "reset") setConfirm("reset");
             else {
-              setNote("Reset requested — snapshot restore is simulated in this clone.");
+              setNote("Reset requested — snapshot restore is simulated in this build.");
               setConfirm(null);
             }
           }}
@@ -222,7 +222,7 @@ function Updates({
           </div>
           <button
             className="mt-3 text-[12.5px] text-link"
-            onClick={() => setNote("You're on the latest clone build.")}
+            onClick={() => setNote("You're on the latest local build.")}
           >
             Check for Updates
           </button>

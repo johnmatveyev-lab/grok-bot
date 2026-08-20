@@ -371,7 +371,7 @@ async function gh(creds: Creds, path: string, init: RequestInit = {}) {
         authorization: `Bearer ${creds.token}`,
         accept: "application/vnd.github+json",
         "x-github-api-version": "2022-11-28",
-        "user-agent": "grok-bot-clone",
+        "user-agent": "open-teammate-bots/0.1",
         "content-type": "application/json",
         ...init.headers,
       },

@@ -32,7 +32,7 @@ const defaultComputer = (): ComputerState => ({
   cwd: "/workspace",
   url: "",
   termLines: [
-    { kind: "out", text: "Grok Bot computer · shared workspace at /workspace" },
+    { kind: "out", text: "Shared computer · workspace at /workspace" },
     { kind: "out", text: "Type a command, or ask a Bot to use the terminal." },
   ],
 });
@@ -451,7 +451,7 @@ export function App() {
   if (!hydrated) {
     return (
       <div className="grid h-full place-items-center text-[13px] text-[var(--muted)]">
-        Opening Grok Bot…
+        Opening teammates…
       </div>
     );
   }
@@ -496,7 +496,7 @@ export function App() {
           <button className="icon-btn" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar">
             <Menu size={16} />
           </button>
-          <div className="text-[13px] font-medium">{active?.name || "Grok Bot"}</div>
+          <div className="text-[13px] font-medium">{active?.name || "Teammates"}</div>
         </div>
         {active ? (
           <>

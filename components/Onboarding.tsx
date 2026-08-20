@@ -21,8 +21,8 @@ export function Onboarding({
       <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-center px-6 py-16">
         {step === 0 && (
           <div className="mx-auto max-w-xl text-center">
-            <div className="kicker">Early beta · clone</div>
-            <h1 className="mt-3 text-[52px] font-semibold leading-[1.02] tracking-[-0.045em]">Meet Grok Bot</h1>
+            <div className="kicker">Early beta · open source</div>
+            <h1 className="mt-3 text-[52px] font-semibold leading-[1.02] tracking-[-0.045em]">Meet your teammates</h1>
             <p className="mx-auto mt-4 max-w-md text-[16px] leading-relaxed text-[var(--muted)]">
               AI teammates you can give real work to. They share a computer of their own — files, a browser, a
               terminal — and only come back when something needs you.
@@ -33,7 +33,7 @@ export function Onboarding({
             >
               Meet a future teammate
             </button>
-            <p className="mt-5 text-[12px] text-[var(--dim)]">Inspired by xAI Grok Bot. Local clone — your computer, your key.</p>
+            <p className="mt-5 text-[12px] text-[var(--dim)]">Your computer, your keys. Independent open-source software.</p>
           </div>
         )}
 

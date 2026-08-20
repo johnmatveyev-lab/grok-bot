@@ -1,4 +1,5 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { denyIfUnauthorized } from "@/lib/access";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { KEY_COOKIE, parseKeyCookie, resolveLlm, streamAnthropic, streamOpenAI } from "@/lib/llm";
 import { isPluginTool, toolsForPlugins } from "@/lib/plugins";
@@ -212,7 +213,7 @@ async function demoLoop(
     await send({ type: "tool", id: "t3", name: "write_file", status: "done", result });
     await send({
       type: "text",
-      text: `Done — left this on the shared computer at \`${path}\`.\n\nI treated this as a first-pass note, not a send. Add an xAI API key in Settings → General if you want me to think with Grok 4.6 instead of this local stand-in.`,
+      text: `Done — left this on the shared computer at \`${path}\`.\n\nI treated this as a first-pass note, not a send. Add an API key in Settings → Models to think with a live model instead of this local stand-in.`,
     });
     return;
   }
@@ -244,11 +245,13 @@ async function demoLoop(
 
   await send({
     type: "text",
-    text: `Hey — ${name} here. I can already use the shared computer (files, terminal, browser) from this chat.\n\nGive me a concrete outcome, the sources that matter, and what I must not do without you. Example: “Write a one-page brief to /workspace/drafts/brief.md from this link, cite everything, don’t email anyone.”\n\nAdd an API key in Settings → Models to run OpenAI, NVIDIA NIM, Kimi K3, Qwen, OpenRouter, Anthropic, or Grok.`,
+    text: `Hey — ${name} here. I can already use the shared computer (files, terminal, browser) from this chat.\n\nGive me a concrete outcome, the sources that matter, and what I must not do without you. Example: “Write a one-page brief to /workspace/drafts/brief.md from this link, cite everything, don’t email anyone.”\n\nAdd an API key in Settings → Models to run NVIDIA NIM, OpenAI, Anthropic, Kimi, Qwen, OpenRouter, or another OpenAI-compatible provider.`,
   });
 }
 
 export async function POST(req: NextRequest) {
+  const denied = denyIfUnauthorized(req);
+  if (denied) return denied;
   const body = (await req.json()) as Incoming;
   const saved = await readSettingsFile();
   const pluginCreds: Record<string, Record<string, string>> = {

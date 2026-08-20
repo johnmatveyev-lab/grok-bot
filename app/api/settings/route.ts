@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { denyIfUnauthorized } from "@/lib/access";
 import { KEY_COOKIE, parseKeyCookie, probeOpenAI, resolveLlm } from "@/lib/llm";
 import { emptyProviderStatus, PROVIDERS, type ProviderId } from "@/lib/providers";
 import { readSettingsFile, writeSettingsFile } from "@/lib/workspace";
@@ -85,6 +86,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = denyIfUnauthorized(req);
+  if (denied) return denied;
   const body = await req.json().catch(() => ({}));
   const saved = await readSettingsFile();
   const cookieKeys = seedCookie(saved, parseKeyCookie(req.cookies.get(KEY_COOKIE)?.value));

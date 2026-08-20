@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { denyIfUnauthorized } from "@/lib/access";
 import {
   browseUrl,
   deleteSafe,
@@ -25,6 +26,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = denyIfUnauthorized(req);
+  if (denied) return denied;
   const body = await req.json().catch(() => ({}));
   const op = body.op as string;
   try {

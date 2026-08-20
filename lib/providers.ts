@@ -25,7 +25,7 @@ export const PROVIDERS: ProviderDef[] = [
     baseUrl: "https://api.x.ai/v1",
     docs: "https://console.x.ai",
     placeholder: "xai-...",
-    hint: "SpaceXAI / xAI. Default for this clone.",
+    hint: "Optional OpenAI-compatible Grok API at api.x.ai. Not required.",
     allowBaseUrl: false,
     defaultModel: "grok-4.6",
     models: [

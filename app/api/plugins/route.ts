@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { denyIfUnauthorized } from "@/lib/access";
 import { PLUGIN_CATALOG } from "@/lib/plugins";
 import { testPlugin } from "@/lib/plugin-runtime";
 import { readSettingsFile, writeSettingsFile } from "@/lib/workspace";
@@ -15,6 +16,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = denyIfUnauthorized(req);
+  if (denied) return denied;
   const body = await req.json().catch(() => ({}));
   const id = String(body.id || "");
   if (!PLUGIN_CATALOG.some((p) => p.id === id)) {

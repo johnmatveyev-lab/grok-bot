@@ -82,7 +82,7 @@ export function Sidebar({
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
         <div className="flex items-center gap-2 px-1">
           <GrokMark />
-          <div className="text-[14px] font-semibold tracking-[-0.03em]">Grok Bot</div>
+          <div className="text-[14px] font-semibold tracking-[-0.03em]">Teammates</div>
         </div>
         <button className="icon-btn" title="New (⌘N)" data-testid="new-chat" onClick={onNew}>
           <Plus size={16} />

@@ -104,7 +104,7 @@ export async function resolveLlm(opts: {
   const baseUrl = (opts.baseUrl || rec?.baseUrl || provider.baseUrl).replace(/\/+$/, "");
   const extraHeaders =
     provider.id === "openrouter"
-      ? { "HTTP-Referer": "https://grok-bot-six.vercel.app", "X-Title": "Grok Bot clone" }
+      ? { "HTTP-Referer": "https://grok-bot-six.vercel.app", "X-Title": "Open teammate bots" }
       : undefined;
 
   return { provider: provider.id, model, apiKey, baseUrl, kind: provider.kind, extraHeaders };

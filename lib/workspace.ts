@@ -41,7 +41,7 @@ export async function ensureWorkspace(): Promise<void> {
       welcome,
       `# Shared computer
 
-This is the Grok Bot workspace. Every Bot on this account can see these files.
+This is the shared workspace. Every teammate on this account can see these files.
 
 Keep durable work in project folders. Treat anything outside \`/workspace\` as replaceable.
 `,
@@ -144,7 +144,7 @@ export async function browseUrl(url: string): Promise<{ title: string; text: str
   if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Only http(s) URLs are allowed");
   const res = await fetch(parsed.toString(), {
     redirect: "follow",
-    headers: { "User-Agent": "GrokBotClone/0.1 (+local computer)" },
+    headers: { "User-Agent": "open-teammate-bots/0.1 (+shared-computer)" },
   });
   const html = await res.text();
   const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || parsed.hostname)
@@ -168,7 +168,7 @@ export function defaultComputerState(): ComputerState {
     cwd: "/workspace",
     url: "",
     termLines: [
-      { kind: "out", text: "Grok Bot computer · shared workspace at /workspace" },
+      { kind: "out", text: "Shared computer · workspace at /workspace" },
       { kind: "out", text: "Type a command, or ask a Bot to use the terminal." },
     ],
   };

@@ -239,7 +239,7 @@ function suggestions(chat: Chat): string[] {
     chat.title?.toLowerCase().includes("sales")
       ? "Build tonight's outbound review list and draft two emails in my voice. Do not send."
       : "Write a working agreement to /workspace/Welcome.md and tell me how you'll use the computer.",
-    "Open https://x.ai/bot, summarize how Grok Bot is different, and save notes under /workspace/drafts.",
+    "List /workspace, then write a one-page working-notes file at /workspace/drafts/brief.md.",
   ];
 }
 
